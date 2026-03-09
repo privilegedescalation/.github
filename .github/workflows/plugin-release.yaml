@@ -46,6 +46,15 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag does not already exist
+        run: |
+          if git tag -l "v${{ inputs.version }}" | grep -q "v${{ inputs.version }}"; then
+            echo "::error::Tag v${{ inputs.version }} already exists. Skipping duplicate release."
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

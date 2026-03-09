@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: release
@@ -122,10 +123,12 @@ jobs:
       - name: Commit and tag
         run: |
           VERSION="${{ inputs.version }}"
+          BRANCH="release/v${VERSION}"
           git add package.json package-lock.json artifacthub-pkg.yml
           git commit -m "release: v${VERSION}"
           git tag "v${VERSION}"
-          git push origin main --tags
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH" --tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -136,3 +139,14 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create PR for version bump
+        run: |
+          VERSION="${{ inputs.version }}"
+          gh pr create \
+            --title "release: v${VERSION}" \
+            --body "Automated version bump and checksum update for v${VERSION}." \
+            --base main \
+            --head "release/v${VERSION}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

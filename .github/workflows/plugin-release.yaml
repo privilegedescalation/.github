@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: release
@@ -119,13 +120,14 @@ jobs:
           echo "CHECKSUM=$CHECKSUM" >> $GITHUB_ENV
           sed -i "s|headlamp/plugin/archive-checksum:.*|headlamp/plugin/archive-checksum: sha256:${CHECKSUM}|" artifacthub-pkg.yml
 
-      - name: Commit and tag
+      - name: Tag current main HEAD
         run: |
           VERSION="${{ inputs.version }}"
-          git add package.json package-lock.json artifacthub-pkg.yml
-          git commit -m "release: v${VERSION}"
-          git tag "v${VERSION}"
-          git push origin main --tags
+          # Tag the current main HEAD (before version bump commit)
+          # Tags are not subject to branch protection rules
+          MAIN_SHA=$(git rev-parse HEAD)
+          git tag "v${VERSION}" "$MAIN_SHA"
+          git push origin "v${VERSION}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -134,5 +136,21 @@ jobs:
           files: ${{ env.TARBALL }}
           fail_on_unmatched_files: true
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Open PR for version bump metadata
+        run: |
+          VERSION="${{ inputs.version }}"
+          BRANCH="release/v${VERSION}-metadata"
+          git checkout -b "$BRANCH"
+          git add package.json package-lock.json artifacthub-pkg.yml
+          git commit -m "chore: update metadata for v${VERSION} release"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: update metadata for v${VERSION} release" \
+            --body "Automated PR to update package.json version and artifacthub-pkg.yml checksum/URL after the v${VERSION} release."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

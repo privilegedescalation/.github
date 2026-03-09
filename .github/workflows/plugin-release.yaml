@@ -148,5 +148,6 @@ jobs:
             --body "Automated version bump and checksum update for v${VERSION}." \
             --base main \
             --head "release/v${VERSION}"
+          gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

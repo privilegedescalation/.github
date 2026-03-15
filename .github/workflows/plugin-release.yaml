@@ -133,10 +133,10 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           BRANCH="release/v${VERSION}"
+          git checkout -b "$BRANCH"
           git add package.json package-lock.json artifacthub-pkg.yml
           git commit -m "release: v${VERSION}"
           git tag "v${VERSION}"
-          git checkout -b "$BRANCH"
           git push origin "$BRANCH" --tags
 
       - name: Install GitHub CLI

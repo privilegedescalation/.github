@@ -35,6 +35,7 @@ jobs:
   release:
     needs: ci
     runs-on: local-ubuntu-latest
+    container: node:${{ inputs.node-version }}
     timeout-minutes: 10
 
     steps:
@@ -57,16 +58,15 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ inputs.node-version }}
-          cache: 'npm'
+      - name: Install required tools
+        run: |
+          apt-get update && apt-get install -y jq curl git
 
       - name: Configure Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Update version in package.json
         run: npm version ${{ inputs.version }} --no-git-tag-version --allow-same-version
@@ -134,10 +134,17 @@ jobs:
           VERSION="${{ inputs.version }}"
           BRANCH="release/v${VERSION}"
           git add package.json package-lock.json artifacthub-pkg.yml
-          git commit -m "release: v${VERSION}"
+          git commit -m "release: v${VERSION}" -m "Co-Authored-By: Paperclip <noreply@paperclip.ing>"
           git tag "v${VERSION}"
-          git checkout -b "$BRANCH"
+          git checkout -B "$BRANCH"
           git push origin "$BRANCH" --tags
+
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          apt-get update && apt-get install gh -y
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -160,3 +167,4 @@ jobs:
           gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

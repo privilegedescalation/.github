@@ -35,7 +35,6 @@ jobs:
   release:
     needs: ci
     runs-on: local-ubuntu-latest
-    container: node:${{ inputs.node-version }}
     timeout-minutes: 10
 
     steps:
@@ -51,16 +50,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
       - name: Check tag does not already exist
         run: |
           if git tag -l "v${{ inputs.version }}" | grep -q "v${{ inputs.version }}"; then
             echo "::error::Tag v${{ inputs.version }} already exists. Skipping duplicate release."
             exit 1
           fi
-
-      - name: Install required tools
-        run: |
-          apt-get update && apt-get install -y jq curl git
 
       - name: Configure Git
         run: |
@@ -138,13 +139,6 @@ jobs:
           git commit -m "release: v${VERSION}"
           git tag "v${VERSION}"
           git push origin "$BRANCH" --tags
-
-      - name: Install GitHub CLI
-        run: |
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-          apt-get update && apt-get install gh -y
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

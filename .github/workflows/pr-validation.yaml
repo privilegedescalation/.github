@@ -29,7 +29,7 @@ jobs:
           if ls .github/scripts/*.sh 1>/dev/null 2>&1; then
             for script in .github/scripts/*.sh; do
               echo "Checking ${script}..."
-              shellcheck --severity=warning "$script" || true
+              shellcheck --severity=warning "$script"
             done
           else
             echo "No shell scripts to check"

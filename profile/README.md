@@ -22,7 +22,7 @@ We build open source [Headlamp](https://headlamp.dev) plugins that bring deep vi
 | [headlamp-sealed-secrets-plugin](https://github.com/privilegedescalation/headlamp-sealed-secrets-plugin) | Manage Bitnami Sealed Secrets with client-side encryption | [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/headlamp-sealed-secrets-plugin)](https://artifacthub.io/packages/headlamp/headlamp-sealed-secrets-plugin/headlamp-sealed-secrets-plugin) |
 | [headlamp-polaris-plugin](https://github.com/privilegedescalation/headlamp-polaris-plugin) | Fairwinds Polaris security and best-practices auditing | [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/headlamp-polaris-plugin)](https://artifacthub.io/packages/headlamp/headlamp-polaris-plugin/headlamp-polaris-plugin) |
 | [headlamp-intel-gpu-plugin](https://github.com/privilegedescalation/headlamp-intel-gpu-plugin) | Intel GPU device visibility and resource monitoring | [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/headlamp-intel-gpu-plugin)](https://artifacthub.io/packages/headlamp/headlamp-intel-gpu-plugin/headlamp-intel-gpu-plugin) |
-| [headlamp-kube-vip-plugin](https://github.com/privilegedescalation/headlamp-kube-vip-plugin) | kube-vip virtual IP and load balancer visibility | — |
+| [headlamp-kube-vip-plugin](https://github.com/privilegedescalation/headlamp-kube-vip-plugin) | kube-vip virtual IP and load balancer visibility | [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/headlamp-kube-vip)](https://artifacthub.io/packages/headlamp/headlamp-kube-vip/headlamp-kube-vip) |
 
 ## Why Headlamp?
 

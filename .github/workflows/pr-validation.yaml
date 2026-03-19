@@ -24,6 +24,13 @@ jobs:
       - name: Validate workflow YAML with actionlint
         run: actionlint -color .github/workflows/*.yaml
 
+      - name: Install shellcheck
+        run: |
+          SHELLCHECK_VERSION="0.10.0"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ --strip-components=1 -C "$HOME/.local/bin" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+
       - name: Shellcheck scripts
         run: |
           if ls .github/scripts/*.sh 1>/dev/null 2>&1; then

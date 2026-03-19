@@ -7,7 +7,7 @@ on:
 
 jobs:
   health-check:
-    runs-on: local-ubuntu-latest
+    runs-on: runners-privilegedescalation
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6

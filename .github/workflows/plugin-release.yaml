@@ -34,7 +34,7 @@ jobs:
 
   release:
     needs: ci
-    runs-on: local-ubuntu-latest
+    runs-on: runners-privilegedescalation
     timeout-minutes: 10
 
     steps:

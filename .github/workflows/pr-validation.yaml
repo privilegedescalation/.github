@@ -6,7 +6,7 @@ on:
 
 jobs:
   validate:
-    runs-on: local-ubuntu-latest
+    runs-on: runners-privilegedescalation
     timeout-minutes: 5
 
     steps:

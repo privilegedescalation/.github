@@ -26,10 +26,7 @@ jobs:
 
       - name: Install shellcheck
         run: |
-          SHELLCHECK_VERSION="0.10.0"
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
-            | tar -xJ --strip-components=1 -C "$HOME/.local/bin" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck >/dev/null 2>&1
 
       - name: Shellcheck scripts
         run: |

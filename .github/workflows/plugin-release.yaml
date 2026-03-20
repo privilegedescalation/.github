@@ -46,10 +46,11 @@ jobs:
     steps:
       - name: Check if tag already exists
         id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          if gh api "repos/${{ github.repository }}/git/refs/tags/v${{ inputs.version }}" --silent 2>/dev/null; then
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/v${{ inputs.version }}")
+          if [ "$HTTP_CODE" = "200" ]; then
             echo "::notice::Tag v${{ inputs.version }} already exists. Release skipped (not an error)."
             echo "skip=true" >> $GITHUB_OUTPUT
           else

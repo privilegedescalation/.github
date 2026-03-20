@@ -39,8 +39,26 @@ jobs:
     with:
       node-version: ${{ inputs.node-version }}
 
+  check-tag:
+    runs-on: runners-privilegedescalation
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check if tag already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/git/refs/tags/v${{ inputs.version }}" --silent 2>/dev/null; then
+            echo "::notice::Tag v${{ inputs.version }} already exists. Release skipped (not an error)."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
   release:
-    needs: ci
+    needs: [ci, check-tag]
+    if: needs.check-tag.outputs.skip != 'true'
     runs-on: runners-privilegedescalation
     timeout-minutes: 10
 
@@ -62,13 +80,6 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-
-      - name: Check tag does not already exist
-        run: |
-          if git tag -l "v${{ inputs.version }}" | grep -q "v${{ inputs.version }}"; then
-            echo "::error::Tag v${{ inputs.version }} already exists. Skipping duplicate release."
-            exit 1
-          fi
 
       - name: Configure Git
         run: |

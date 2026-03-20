@@ -17,6 +17,13 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      RELEASE_APP_ID:
+        description: 'GitHub App ID for creating PRs (org blocks GITHUB_TOKEN from creating PRs)'
+        required: true
+      RELEASE_APP_PRIVATE_KEY:
+        description: 'GitHub App private key (PEM format)'
+        required: true
 
 permissions:
   contents: write
@@ -150,6 +157,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Install GitHub CLI
         run: |
           if ! command -v gh &>/dev/null; then
@@ -173,4 +187,4 @@ jobs:
             --head "release/v${VERSION}"
           gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

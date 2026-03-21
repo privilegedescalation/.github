@@ -23,8 +23,8 @@ warnings=0
 for repo in "${PLUGIN_REPOS[@]}"; do
   echo "--- ${repo} ---"
 
-  # Get last 5 runs
-  runs=$(gh run list --repo "${ORG}/${repo}" --limit 5 --json name,conclusion,headBranch,updatedAt 2>/dev/null || echo "[]")
+  # Get last 10 runs (wider window to catch intermittent failures)
+  runs=$(gh run list --repo "${ORG}/${repo}" --limit 10 --json name,conclusion,headBranch,updatedAt 2>/dev/null || echo "[]")
 
   if [ "$runs" = "[]" ]; then
     echo "  WARNING: No workflow runs found"
@@ -32,27 +32,23 @@ for repo in "${PLUGIN_REPOS[@]}"; do
     continue
   fi
 
-  # Use node for JSON parsing (jq not available)
-  main_failures=$(echo "$runs" | node -e "
-    const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
-    const fails = d.filter(r => r.headBranch==='main' && r.conclusion==='failure');
-    console.log(fails.length);
-  ")
-  total=$(echo "$runs" | node -e "
-    const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
-    console.log(d.length);
-  ")
+  # Count CI failures on main — exclude Release workflow failures since those
+  # fail at the post-release PR-creation step (tracked separately via PRI-380).
+  main_failures=$(echo "$runs" | jq '[.[] | select(.headBranch=="main" and .conclusion=="failure" and .name!="Release")] | length')
+  total=$(echo "$runs" | jq 'length')
 
   if [ "$main_failures" -gt 0 ]; then
-    echo "  FAIL: ${main_failures} failure(s) in last ${total} runs on main:"
-    echo "$runs" | node -e "
-      const d = JSON.parse(require('fs').readFileSync(0,'utf8'));
-      d.filter(r => r.headBranch==='main' && r.conclusion==='failure')
-       .forEach(r => console.log('    - ' + r.name + ' (' + r.updatedAt + ')'));
-    "
+    echo "  FAIL: ${main_failures} CI failure(s) in last ${total} runs on main:"
+    echo "$runs" | jq -r '.[] | select(.headBranch=="main" and .conclusion=="failure" and .name!="Release") | "    - \(.name) (\(.updatedAt))"'
     ((failures++)) || true
   else
-    echo "  OK: All recent runs passing"
+    echo "  OK: All recent CI runs passing"
+    # Surface any Release failures as a warning (known issue: PRI-380)
+    release_failures=$(echo "$runs" | jq '[.[] | select(.name=="Release" and .conclusion=="failure")] | length')
+    if [ "$release_failures" -gt 0 ]; then
+      echo "  WARN: Release workflow has ${release_failures} failure(s) — see PRI-380 (missing RELEASE_APP org secrets)"
+      ((warnings++)) || true
+    fi
   fi
 
   # Check latest release

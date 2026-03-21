@@ -215,7 +215,9 @@ jobs:
           VERSION="${{ inputs.version }}"
           gh pr create \
             --title "release: v${VERSION}" \
-            --body "Automated version bump and checksum update for v${VERSION}." \
+            --body "Automated version bump and checksum update for v${VERSION}.
+
+cc @cpfarhood" \
             --base main \
             --head "release/v${VERSION}"
           gh pr merge "release/v${VERSION}" --auto --squash --delete-branch

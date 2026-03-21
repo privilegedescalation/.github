@@ -12,6 +12,7 @@ PLUGIN_REPOS=(
   headlamp-intel-gpu-plugin
   headlamp-tns-csi-plugin
   headlamp-kube-vip-plugin
+  headlamp-plugin-template
 )
 
 echo "=== CI/CD Health Check — $(date -u '+%Y-%m-%d %H:%M UTC') ==="

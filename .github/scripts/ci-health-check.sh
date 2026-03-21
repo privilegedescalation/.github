@@ -33,23 +33,30 @@ for repo in "${PLUGIN_REPOS[@]}"; do
     continue
   fi
 
-  # Count CI failures on main — exclude Release workflow failures since those
-  # fail at the post-release PR-creation step (tracked separately via PRI-380).
-  main_failures=$(echo "$runs" | jq '[.[] | select(.headBranch=="main" and .conclusion=="failure" and .name!="Release")] | length')
+  # Count CI failures on main — exclude E2E and Release (tracked separately below)
+  main_failures=$(echo "$runs" | jq '[.[] | select(.headBranch=="main" and .conclusion=="failure" and .name!="Release" and .name!="E2E Tests")] | length')
   total=$(echo "$runs" | jq 'length')
 
   if [ "$main_failures" -gt 0 ]; then
     echo "  FAIL: ${main_failures} CI failure(s) in last ${total} runs on main:"
-    echo "$runs" | jq -r '.[] | select(.headBranch=="main" and .conclusion=="failure" and .name!="Release") | "    - \(.name) (\(.updatedAt))"'
+    echo "$runs" | jq -r '.[] | select(.headBranch=="main" and .conclusion=="failure" and .name!="Release" and .name!="E2E Tests") | "    - \(.name) (\(.updatedAt))"'
     ((failures++)) || true
   else
-    echo "  OK: All recent CI runs passing"
-    # Surface any Release failures as a warning (known issue: PRI-380)
-    release_failures=$(echo "$runs" | jq '[.[] | select(.name=="Release" and .conclusion=="failure")] | length')
-    if [ "$release_failures" -gt 0 ]; then
-      echo "  WARN: Release workflow has ${release_failures} failure(s) — see PRI-380 (missing RELEASE_APP org secrets)"
-      ((warnings++)) || true
-    fi
+    echo "  OK: CI passing on main"
+  fi
+
+  # Surface E2E test failures as warnings (infra blocker: RBAC not yet applied — PRI-494)
+  e2e_failures=$(echo "$runs" | jq '[.[] | select(.headBranch=="main" and .name=="E2E Tests" and .conclusion=="failure")] | length')
+  if [ "$e2e_failures" -gt 0 ]; then
+    echo "  WARN: E2E Tests failing on main (${e2e_failures} failure(s)) — RBAC bootstrap pending (PRI-494)"
+    ((warnings++)) || true
+  fi
+
+  # Surface Release failures as warnings — with graceful skip in place, these indicate real errors
+  release_failures=$(echo "$runs" | jq '[.[] | select(.name=="Release" and .conclusion=="failure")] | length')
+  if [ "$release_failures" -gt 0 ]; then
+    echo "  WARN: Release workflow has ${release_failures} failure(s) — investigate (PRI-380 secrets still pending)"
+    ((warnings++)) || true
   fi
 
   # Check latest release

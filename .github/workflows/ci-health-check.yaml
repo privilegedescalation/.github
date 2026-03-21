@@ -12,8 +12,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: privilegedescalation
+
       - name: Run CI/CD health check
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
+          if [ "${{ steps.app-token.outcome }}" = "success" ]; then
+            echo "Using GitHub App token for cross-repo access"
+          else
+            echo "::warning::RELEASE_APP_ID not configured — using GITHUB_TOKEN. Cross-repo workflow run data will be unavailable. Configure RELEASE_APP_ID org secret to enable full health check."
+          fi
           ./.github/scripts/ci-health-check.sh

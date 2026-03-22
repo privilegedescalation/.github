@@ -59,10 +59,10 @@ jobs:
             "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews")
 
           CTO_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${CTO_REVIEWER}" \
-            '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')
+            '[.[] | select(.user.login == $user or .user.login == ($user + "[bot]"))] | last | .state == "APPROVED"')
 
           QA_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${QA_REVIEWER}" \
-            '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')
+            '[.[] | select(.user.login == $user or .user.login == ($user + "[bot]"))] | last | .state == "APPROVED"')
 
           echo "CTO (${CTO_REVIEWER}) approved: ${CTO_APPROVED}"
           echo "QA (${QA_REVIEWER}) approved: ${QA_APPROVED}"

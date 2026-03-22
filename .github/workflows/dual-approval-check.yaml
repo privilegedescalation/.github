@@ -1,0 +1,78 @@
+name: Dual Approval Check
+
+# Reusable workflow: verifies that both the CTO and QA bot accounts
+# have approved a pull request. Plugin repos call this on
+# pull_request_review events to get a required GitHub status check.
+#
+# Usage in a plugin repo's workflow:
+#
+#   on:
+#     pull_request_review:
+#       types: [submitted, dismissed]
+#     pull_request:
+#       types: [opened, reopened, synchronize]
+#
+#   jobs:
+#     dual-approval:
+#       uses: privilegedescalation/.github/.github/workflows/dual-approval-check.yaml@main
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      cto-reviewer:
+        description: "GitHub username of the CTO reviewer"
+        required: false
+        type: string
+        default: "privilegedescalation-cto"
+      qa-reviewer:
+        description: "GitHub username of the QA reviewer"
+        required: false
+        type: string
+        default: "privilegedescalation-qa"
+
+jobs:
+  dual-approval:
+    name: Dual Approval (CTO + QA)
+    runs-on: runners-privilegedescalation
+    timeout-minutes: 5
+
+    steps:
+      - name: Check dual approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CTO_REVIEWER: ${{ inputs.cto-reviewer }}
+          QA_REVIEWER: ${{ inputs.qa-reviewer }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "::error::No pull request number found in event context. This workflow must be called from a pull_request or pull_request_review trigger."
+            exit 1
+          fi
+
+          echo "Checking approvals on PR #${PR_NUMBER} in ${REPO}"
+
+          REVIEWS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" 2>&1)
+
+          CTO_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${CTO_REVIEWER}" \
+            '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')
+
+          QA_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${QA_REVIEWER}" \
+            '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')
+
+          echo "CTO (${CTO_REVIEWER}) approved: ${CTO_APPROVED}"
+          echo "QA (${QA_REVIEWER}) approved: ${QA_APPROVED}"
+
+          if [ "${CTO_APPROVED}" = "true" ] && [ "${QA_APPROVED}" = "true" ]; then
+            echo "Both CTO and QA have approved. Dual approval check passed."
+          else
+            echo "Dual approval check failed."
+            if [ "${CTO_APPROVED}" != "true" ]; then
+              echo "  Missing: CTO approval from ${CTO_REVIEWER}"
+            fi
+            if [ "${QA_APPROVED}" != "true" ]; then
+              echo "  Missing: QA approval from ${QA_REVIEWER}"
+            fi
+            exit 1
+          fi

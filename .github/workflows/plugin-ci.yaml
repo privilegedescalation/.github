@@ -27,12 +27,23 @@ jobs:
             echo "manager=npm" >> $GITHUB_OUTPUT
           fi
 
+      - name: Resolve pnpm version
+        id: pnpm-ver
+        if: steps.pkg-manager.outputs.manager == 'pnpm'
+        run: |
+          PM=$(node -pe "try{require('./package.json').packageManager||''}catch(e){''}" 2>/dev/null || echo "")
+          if [[ "$PM" == pnpm@* ]]; then
+            echo "version=" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup pnpm
         if: steps.pkg-manager.outputs.manager == 'pnpm'
         uses: pnpm/action-setup@v4
         with:
           run_install: false
-          version: latest
+          version: ${{ steps.pnpm-ver.outputs.version }}
 
       - name: Setup Node
         uses: actions/setup-node@v4

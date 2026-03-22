@@ -24,8 +24,8 @@ jobs:
           if [ -f "pnpm-lock.yaml" ]; then
             echo "manager=pnpm" >> $GITHUB_OUTPUT
             # Check for packageManager field in package.json (Corepack pinning).
-            # pnpm/action-setup@v4 errors if both `version` input and `packageManager`
-            # are set, so we detect here and use two conditional steps below.
+            # pnpm/action-setup@v4 errors when `packageManager` is set (even without
+            # a `version` input), so we use Corepack directly for those repos.
             PM=$(node -e "try{const p=require('./package.json');const v=p.packageManager||'';console.log(v.startsWith('pnpm@')?'true':'false')}catch(e){console.log('false')}" 2>/dev/null || echo "false")
             echo "has_package_manager=$PM" >> $GITHUB_OUTPUT
           else
@@ -33,11 +33,11 @@ jobs:
             echo "has_package_manager=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup pnpm (version from packageManager field)
+      - name: Setup pnpm (via Corepack, reads version from packageManager field)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
-        uses: pnpm/action-setup@v4
-        with:
-          run_install: false
+        run: |
+          corepack enable pnpm
+          corepack install
 
       - name: Setup pnpm (version latest)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'false'

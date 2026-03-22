@@ -4,6 +4,7 @@
   "baseBranches": ["main"],
   "schedule": ["every weekend"],
   "prConcurrentLimit": 5,
+  "pinDigests": true,
   "packageRules": [
     {
       "matchManagers": ["npm"],

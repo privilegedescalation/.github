@@ -53,7 +53,10 @@ jobs:
 
           echo "Checking approvals on PR #${PR_NUMBER} in ${REPO}"
 
-          REVIEWS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" 2>&1)
+          REVIEWS=$(curl -sf \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews")
 
           CTO_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${CTO_REVIEWER}" \
             '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')

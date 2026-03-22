@@ -1,11 +1,23 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/privilegedescalation/org/main/privilegedescalation-logo.jpg" alt="Privileged Escalation" width="300" />
+  <img src="privilegedescalation-logo.jpg" alt="Privileged Escalation" width="300" />
 </p>
+
+<div align="center">
+
+![GitHub Org stars](https://img.shields.io/github/stars/privilegedescalation)
+![GitHub followers](https://img.shields.io/github/followers/privilegedescalation)
+![License](https://img.shields.io/github/license/privilegedescalation/.github)
+![Profile views](https://komarev.com/ghpvc/?username=privilegedescalation&color=brightgreen)
+
+</div>
 
 <h3 align="center">Headlamp plugins for the infrastructure you actually run.</h3>
 
 <p align="center">
-  <a href="https://artifacthub.io/packages/search?org=privilegedescalation&kind=21">Artifact Hub</a> &middot;
+  <a href="https://artifacthub.io/packages/search?org=privilegedescalation&kind=21">Artifact Hub</a>
+  ·
+  <a href="https://headlamp.dev">Headlamp</a>
+  ·
   <a href="https://github.com/sponsors/privilegedescalation">Sponsor</a>
 </p>
 

@@ -56,10 +56,10 @@ jobs:
           REVIEWS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/reviews" 2>&1)
 
           CTO_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${CTO_REVIEWER}" \
-            '[.[] | select(.user.login == $user and .state == "APPROVED")] | length > 0')
+            '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')
 
           QA_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${QA_REVIEWER}" \
-            '[.[] | select(.user.login == $user and .state == "APPROVED")] | length > 0')
+            '[.[] | select(.user.login == $user)] | last | .state == "APPROVED"')
 
           echo "CTO (${CTO_REVIEWER}) approved: ${CTO_APPROVED}"
           echo "QA (${QA_REVIEWER}) approved: ${QA_APPROVED}"

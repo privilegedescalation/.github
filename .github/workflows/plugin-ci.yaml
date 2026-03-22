@@ -31,7 +31,7 @@ jobs:
         id: pnpm-ver
         if: steps.pkg-manager.outputs.manager == 'pnpm'
         run: |
-          PM=$(node -pe "try{require('./package.json').packageManager||''}catch(e){''}" 2>/dev/null || echo "")
+          PM=$(python3 -c "import json; d=json.load(open('package.json')); print(d.get('packageManager',''),end='')" 2>/dev/null || echo "")
           if [[ "$PM" == pnpm@* ]]; then
             echo "version=" >> "$GITHUB_OUTPUT"
           else

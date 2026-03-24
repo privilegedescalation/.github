@@ -36,7 +36,7 @@ jobs:
           fi
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node-version }}
           # Only enable built-in npm caching here; pnpm caching is handled below
@@ -51,7 +51,7 @@ jobs:
 
       - name: Setup pnpm (version latest)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'false'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           run_install: false
           version: latest
@@ -63,7 +63,7 @@ jobs:
 
       - name: Cache pnpm store
         if: steps.pkg-manager.outputs.manager == 'pnpm'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}

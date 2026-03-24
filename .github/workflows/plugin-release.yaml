@@ -260,6 +260,12 @@ jobs:
             --body "$BODY" \
             --base main \
             --head "release/v${VERSION}"
-          gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
+          # Try auto-merge first (works on repos with required status checks pending).
+          # Fall back to direct squash merge on repos without required status checks
+          # (auto-merge is rejected when there are no pending required checks to wait for).
+          if ! gh pr merge "release/v${VERSION}" --auto --squash --delete-branch 2>/dev/null; then
+            echo "Auto-merge not available (no pending required status checks). Falling back to direct squash merge."
+            gh pr merge "release/v${VERSION}" --squash --delete-branch
+          fi
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

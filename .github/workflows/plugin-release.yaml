@@ -103,16 +103,30 @@ jobs:
           if [ -f "pnpm-lock.yaml" ]; then
             echo "manager=pnpm" >> $GITHUB_OUTPUT
             echo "lockfile=pnpm-lock.yaml" >> $GITHUB_OUTPUT
+            # Check for packageManager field in package.json (Corepack pinning).
+            # pnpm/action-setup@v5 errors when packageManager is absent and no version
+            # is specified, so use Corepack for repos that have the field pinned and
+            # fall back to pnpm/action-setup with version: latest for repos that don't.
+            PM=$(python3 -c "import json,sys; d=json.load(open('package.json')); print('true' if d.get('packageManager','').startswith('pnpm@') else 'false')" 2>/dev/null || echo "false")
+            echo "has_package_manager=$PM" >> $GITHUB_OUTPUT
           else
             echo "manager=npm" >> $GITHUB_OUTPUT
             echo "lockfile=package-lock.json" >> $GITHUB_OUTPUT
+            echo "has_package_manager=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup pnpm
-        if: steps.pkg-manager.outputs.manager == 'pnpm'
+      - name: Setup pnpm (via Corepack, reads version from packageManager field)
+        if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
+        run: |
+          corepack enable pnpm
+          corepack install
+
+      - name: Setup pnpm (version latest)
+        if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'false'
         uses: pnpm/action-setup@v5
         with:
           run_install: false
+          version: latest
 
       - name: Setup Node
         uses: actions/setup-node@v6

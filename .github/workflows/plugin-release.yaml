@@ -215,11 +215,20 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           BRANCH="release/v${VERSION}"
+          # If the release branch already exists (e.g. from a failed prior run),
+          # delete it so the re-trigger can proceed cleanly. The check-tag job
+          # above already skips when the tag exists, so we only reach here when
+          # the tag does NOT exist yet — safe to remove a stale branch.
+          if git ls-remote --exit-code origin "refs/heads/$BRANCH" 2>/dev/null; then
+            echo "::notice::Branch $BRANCH already exists — deleting for clean re-trigger."
+            git push origin --delete "$BRANCH"
+          fi
           git checkout -b "$BRANCH"
           git add package.json "${{ steps.pkg-manager.outputs.lockfile }}" artifacthub-pkg.yml
           git commit -m "release: v${VERSION}"
           git tag "v${VERSION}"
-          git push origin "$BRANCH" --tags
+          git push origin "$BRANCH"
+          git push origin "refs/tags/v${VERSION}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -255,11 +264,16 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           BODY=$(printf "Automated version bump and checksum update for v%s.\n\ncc @cpfarhood" "${VERSION}")
-          gh pr create \
-            --title "release: v${VERSION}" \
-            --body "$BODY" \
-            --base main \
-            --head "release/v${VERSION}"
+          # Create PR only if one doesn't already exist (idempotent re-trigger).
+          if ! gh pr view "release/v${VERSION}" --json number 2>/dev/null; then
+            gh pr create \
+              --title "release: v${VERSION}" \
+              --body "$BODY" \
+              --base main \
+              --head "release/v${VERSION}"
+          else
+            echo "::notice::PR for release/v${VERSION} already exists — skipping creation."
+          fi
           # Try auto-merge first (works on repos with required status checks pending).
           # Fall back to direct squash merge on repos without required status checks
           # (auto-merge is rejected when there are no pending required checks to wait for).

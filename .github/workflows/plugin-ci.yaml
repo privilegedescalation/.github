@@ -18,6 +18,59 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Validate artifacthub-pkg.yml
+        run: |
+          python3 - <<'EOF'
+          import sys, re
+          try:
+              import yaml
+          except ImportError:
+              # yaml not available — skip (shouldn't happen on ubuntu runners)
+              print("::warning::PyYAML not available, skipping artifacthub-pkg.yml validation")
+              sys.exit(0)
+
+          try:
+              with open("artifacthub-pkg.yml") as f:
+                  pkg = yaml.safe_load(f)
+          except FileNotFoundError:
+              print("::error::artifacthub-pkg.yml not found")
+              sys.exit(1)
+          except yaml.YAMLError as e:
+              print(f"::error::artifacthub-pkg.yml is invalid YAML: {e}")
+              sys.exit(1)
+
+          errors = []
+
+          # Required top-level fields
+          for field in ["version", "name", "description", "homeURL"]:
+              if not pkg.get(field):
+                  errors.append(f"Missing required field: {field}")
+
+          # Version must be SemVer
+          version = pkg.get("version", "")
+          if version and not re.match(r'^\d+\.\d+\.\d+$', str(version)):
+              errors.append(f"version '{version}' is not SemVer (expected X.Y.Z)")
+
+          # Headlamp plugin annotations
+          annotations = pkg.get("annotations", {}) or {}
+          archive_url = annotations.get("headlamp/plugin/archive-url", "")
+          archive_checksum = annotations.get("headlamp/plugin/archive-checksum", "")
+
+          if not archive_url:
+              errors.append("Missing annotation: headlamp/plugin/archive-url")
+          if not archive_checksum:
+              errors.append("Missing annotation: headlamp/plugin/archive-checksum")
+          elif not re.match(r'^sha256:[0-9a-f]{64}$', str(archive_checksum)):
+              errors.append(f"archive-checksum has unexpected format: '{archive_checksum}' (expected sha256:<64 hex chars>)")
+
+          if errors:
+              for e in errors:
+                  print(f"::error::{e}")
+              sys.exit(1)
+
+          print(f"artifacthub-pkg.yml valid: name={pkg['name']} version={pkg['version']}")
+          EOF
+
       - name: Detect package manager
         id: pkg-manager
         run: |

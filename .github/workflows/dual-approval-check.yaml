@@ -34,7 +34,7 @@ on:
 jobs:
   dual-approval:
     name: Dual Approval (CTO + QA)
-    runs-on: runners-privilegedescalation
+    runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:

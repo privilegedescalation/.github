@@ -48,7 +48,7 @@ jobs:
 
           # Version must be SemVer
           version = pkg.get("version", "")
-          if version and not re.match(r'^\d+\.\d+\.\d+', str(version)):
+          if version and not re.match(r'^\d+\.\d+\.\d+$', str(version)):
               errors.append(f"version '{version}' is not SemVer (expected X.Y.Z)")
 
           # Headlamp plugin annotations

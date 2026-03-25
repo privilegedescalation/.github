@@ -22,7 +22,7 @@ on:
     inputs:
       pr_number:
         description: "Pull request number"
-        required: true
+        required: false
         type: number
       cto-reviewer:
         description: "GitHub username of the CTO reviewer"

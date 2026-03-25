@@ -274,15 +274,24 @@ jobs:
           else
             echo "::notice::PR for release/v${VERSION} already exists — skipping creation."
           fi
-          # Try auto-merge first (works on repos with required status checks pending).
-          # Fall back to direct squash merge on repos without required status checks
-          # (auto-merge is rejected when there are no pending required checks to wait for).
-          # If PR is already merged, skip entirely to avoid "branch not found" errors.
+          # Check if PR is already merged first (skip if so).
           PR_STATE=$(gh pr view "release/v${VERSION}" --json state --jq '.state' 2>/dev/null || echo "unknown")
           if [ "$PR_STATE" = "MERGED" ]; then
             echo "PR release/v${VERSION} is already merged. Skipping merge step."
-          elif ! gh pr merge "release/v${VERSION}" --auto --squash --delete-branch 2>&1; then
-            echo "Auto-merge not available (no pending required status checks or other constraint). Falling back to direct squash merge."
+            return 0 || true
+          fi
+          # Use auto-merge only when there are pending status checks to wait for.
+          # Valid mergeableState values from GitHub REST API:
+          # behind, blocked, clean, dirty, draft, has_hooks, unknown, unstable
+          # Note: "pending" is NOT a valid mergeable_state value — it was dead code.
+          MERGE_STATE=$(gh pr view "release/v${VERSION}" --json mergeableState --jq '.mergeableState')
+          if [ "$MERGE_STATE" = "blocked" ]; then
+            echo "PR is $MERGE_STATE — enabling auto-merge."
+            gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
+          else
+            # When mergeableState is "unknown", GitHub is still computing mergeability.
+            # Fall through to direct squash merge — this is the safest fallback.
+            echo "PR is $MERGE_STATE — merging directly."
             gh pr merge "release/v${VERSION}" --squash --delete-branch
           fi
         env:

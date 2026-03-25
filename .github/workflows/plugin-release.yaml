@@ -211,6 +211,18 @@ jobs:
           echo "CHECKSUM=$CHECKSUM" >> $GITHUB_ENV
           sed -i "s|headlamp/plugin/archive-checksum:.*|headlamp/plugin/archive-checksum: sha256:${CHECKSUM}|" artifacthub-pkg.yml
 
+      - name: Rebuild tarball with correct checksum
+        run: |
+          rm -f "${{ env.TARBALL }}"
+          npx @kinvolk/headlamp-plugin package
+          VERSION="${{ inputs.version }}"
+          PKG_NAME="${{ env.PKG_NAME }}"
+          TARBALL="${PKG_NAME}-${VERSION}.tar.gz"
+          for f in *.tar.gz; do
+            [ "$f" != "$TARBALL" ] && mv "$f" "$TARBALL"
+          done
+          echo "TARBALL=$TARBALL" >> $GITHUB_ENV
+
       - name: Commit and tag
         run: |
           VERSION="${{ inputs.version }}"

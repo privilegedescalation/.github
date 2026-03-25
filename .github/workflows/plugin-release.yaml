@@ -277,8 +277,12 @@ jobs:
           # Try auto-merge first (works on repos with required status checks pending).
           # Fall back to direct squash merge on repos without required status checks
           # (auto-merge is rejected when there are no pending required checks to wait for).
-          if ! gh pr merge "release/v${VERSION}" --auto --squash --delete-branch 2>/dev/null; then
-            echo "Auto-merge not available (no pending required status checks). Falling back to direct squash merge."
+          # If PR is already merged, skip entirely to avoid "branch not found" errors.
+          PR_STATE=$(gh pr view "release/v${VERSION}" --json state --jq '.state' 2>/dev/null || echo "unknown")
+          if [ "$PR_STATE" = "MERGED" ]; then
+            echo "PR release/v${VERSION} is already merged. Skipping merge step."
+          elif ! gh pr merge "release/v${VERSION}" --auto --squash --delete-branch 2>&1; then
+            echo "Auto-merge not available (no pending required status checks or other constraint). Falling back to direct squash merge."
             gh pr merge "release/v${VERSION}" --squash --delete-branch
           fi
         env:

@@ -97,6 +97,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # NOTE: When updating step ordering, mirror changes in plugin-ci.yaml.
+      # These two workflows must be kept in sync for shared job logic.
+      # See: https://github.com/privilegedescalation/.github/issues/XXX
+
       - name: Detect package manager
         id: pkg-manager
         run: |
@@ -115,6 +119,12 @@ jobs:
             echo "has_package_manager=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ steps.pkg-manager.outputs.manager }}
+
       - name: Setup pnpm (via Corepack, reads version from packageManager field)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
         run: |
@@ -127,12 +137,6 @@ jobs:
         with:
           run_install: false
           version: latest
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ inputs.node-version }}
-          cache: ${{ steps.pkg-manager.outputs.manager }}
 
       - name: Configure Git
         run: |

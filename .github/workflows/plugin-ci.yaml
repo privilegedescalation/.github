@@ -18,6 +18,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # NOTE: When updating step ordering, mirror changes in plugin-release.yaml.
+      # These two workflows must be kept in sync for shared job logic.
+      # See: https://github.com/privilegedescalation/.github/issues/XXX
+
       - name: Validate artifacthub-pkg.yml
         run: |
           python3 - <<'EOF'

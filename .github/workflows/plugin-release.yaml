@@ -115,6 +115,14 @@ jobs:
             echo "has_package_manager=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+          # Only enable built-in npm caching here; pnpm caching is handled below
+          # after pnpm is installed (corepack is not available before setup-node).
+          cache: ${{ steps.pkg-manager.outputs.manager == 'npm' && 'npm' || '' }}
+
       - name: Setup pnpm (via Corepack, reads version from packageManager field)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
         run: |
@@ -128,11 +136,19 @@ jobs:
           run_install: false
           version: latest
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Get pnpm store directory
+        id: pnpm-store
+        if: steps.pkg-manager.outputs.manager == 'pnpm'
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        if: steps.pkg-manager.outputs.manager == 'pnpm'
+        uses: actions/cache@v5
         with:
-          node-version: ${{ inputs.node-version }}
-          cache: ${{ steps.pkg-manager.outputs.manager }}
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Configure Git
         run: |

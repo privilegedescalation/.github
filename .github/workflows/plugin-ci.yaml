@@ -99,6 +99,7 @@ jobs:
       - name: Setup pnpm (via Corepack, reads version from packageManager field)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
         run: |
+          npm install -g corepack
           corepack enable pnpm
           corepack install
 

@@ -59,6 +59,15 @@ for repo in "${PLUGIN_REPOS[@]}"; do
     ((warnings++)) || true
   fi
 
+  # Check for action_required — GitHub's "Require approval for first-time contributors" setting
+  # blocks workflow runs from GitHub App bot accounts. This is a CI pipeline blocker (see PRI-44).
+  action_required_count=$(echo "$runs" | jq '[.[] | select(.conclusion=="action_required")] | length')
+  if [ "$action_required_count" -gt 0 ]; then
+    echo "  FAIL: ${action_required_count} workflow run(s) with action_required (GitHub App PR approval blocked):"
+    echo "$runs" | jq -r '.[] | select(.conclusion=="action_required") | "    - \(.name) on \(.headBranch) (\(.updatedAt))"'
+    ((failures++)) || true
+  fi
+
   # Check latest release
   latest_release=$(gh api "repos/${ORG}/${repo}/releases" --jq '.[0].tag_name // "none"' 2>/dev/null || echo "error")
   echo "  Latest release: ${latest_release}"

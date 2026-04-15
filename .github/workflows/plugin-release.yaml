@@ -330,3 +330,27 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Verify checksums are consistent (main == tag == tarball)
+        run: |
+          VERSION="${{ inputs.version }}"
+          TARBALL_CS=$(sha256sum "${{ env.TARBALL }}" | awk '{print $1}')
+
+          # Checksum recorded in the tag's artifacthub-pkg.yml
+          TAG_CS=$(git show "v${VERSION}:artifacthub-pkg.yml" 2>/dev/null             | grep "archive-checksum" | awk '{print $2}' | sed 's/sha256://')
+
+          # Checksum now on main (after PR merge)
+          MAIN_CS=$(git fetch origin main 2>/dev/null; git show "origin/main:artifacthub-pkg.yml"             | grep "archive-checksum" | awk '{print $2}' | sed 's/sha256://')
+
+          echo "Tarball SHA256 : $TARBALL_CS"
+          echo "Tag artifacthub: $TAG_CS"
+          echo "Main artifacthub: $MAIN_CS"
+
+          FAIL=0
+          [ "$TARBALL_CS" != "$TAG_CS"  ] && echo "ERROR: tag checksum mismatch!"  && FAIL=1
+          [ "$TARBALL_CS" != "$MAIN_CS" ] && echo "ERROR: main checksum mismatch!" && FAIL=1
+          [ "$FAIL" = "1" ] && exit 1
+          echo "All checksums consistent — ArtifactHub will index correctly."
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+

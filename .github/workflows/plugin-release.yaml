@@ -298,19 +298,19 @@ jobs:
             exit 0
           fi
           # Use auto-merge only when there are pending status checks to wait for.
-          # Valid mergeableState values from GitHub REST API:
-          # behind, blocked, clean, dirty, draft, has_hooks, unknown, unstable
-          # Note: "pending" is NOT a valid mergeable_state value — it was dead code.
-          MERGE_STATE=$(gh pr view "release/v${VERSION}" --json mergeableState --jq '.mergeableState')
-          if [ "$MERGE_STATE" = "blocked" ]; then
+          # Valid mergeStateStatus values (gh GraphQL):
+          # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+          # Note: Field was renamed from mergeableState to mergeStateStatus in gh CLI.
+          MERGE_STATE=$(gh pr view "release/v${VERSION}" --json mergeStateStatus --jq '.mergeStateStatus')
+          if [ "$MERGE_STATE" = "BLOCKED" ]; then
             echo "PR is $MERGE_STATE — enabling auto-merge."
             gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
-          elif [ "$MERGE_STATE" = "unknown" ]; then
+          elif [ "$MERGE_STATE" = "UNKNOWN" ]; then
             # GitHub is still computing mergeability. Retry once after a brief wait.
             echo "PR is $MERGE_STATE — GitHub is computing mergeability. Retrying in 5s."
             sleep 5
-            MERGE_STATE=$(gh pr view "release/v${VERSION}" --json mergeableState --jq '.mergeableState')
-            if [ "$MERGE_STATE" = "blocked" ]; then
+            MERGE_STATE=$(gh pr view "release/v${VERSION}" --json mergeStateStatus --jq '.mergeStateStatus')
+            if [ "$MERGE_STATE" = "BLOCKED" ]; then
               echo "PR is now $MERGE_STATE — enabling auto-merge."
               gh pr merge "release/v${VERSION}" --auto --squash --delete-branch
             else

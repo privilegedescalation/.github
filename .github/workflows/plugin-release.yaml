@@ -281,21 +281,28 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           BODY=$(printf "Automated version bump and checksum update for v%s.\n\ncc @cpfarhood" "${VERSION}")
-          # Create PR only if one doesn't already exist (idempotent re-trigger).
-          if ! gh pr view "release/v${VERSION}" --json number 2>/dev/null; then
+          # Create PR only if an OPEN one doesn't already exist.
+          # Note: gh pr view also finds MERGED PRs; we must check for open ones explicitly
+          # so that a re-trigger after a stale-branch delete creates a fresh PR.
+          OPEN_PR=$(gh pr list --base main --head "release/v${VERSION}" --state open --json number --jq '.[0].number' 2>/dev/null)
+          if [ -z "$OPEN_PR" ]; then
             gh pr create \
               --title "release: v${VERSION}" \
               --body "$BODY" \
               --base main \
               --head "release/v${VERSION}"
           else
-            echo "::notice::PR for release/v${VERSION} already exists — skipping creation."
+            echo "::notice::Open PR #${OPEN_PR} for release/v${VERSION} already exists — skipping creation."
           fi
-          # Check if PR is already merged first (skip if so).
-          PR_STATE=$(gh pr view "release/v${VERSION}" --json state --jq '.state' 2>/dev/null || echo "unknown")
-          if [ "$PR_STATE" = "MERGED" ]; then
-            echo "PR release/v${VERSION} is already merged. Skipping merge step."
-            exit 0
+          # Re-fetch open PR number (handles both new and pre-existing open PRs).
+          PR_STATE=$(gh pr list --base main --head "release/v${VERSION}" --state open --json state --jq '.[0].state' 2>/dev/null || echo "unknown")
+          if [ "$PR_STATE" != "OPEN" ]; then
+            echo "No open PR for release/v${VERSION} — it may have already merged. Checking."
+            PR_STATE=$(gh pr view "release/v${VERSION}" --json state --jq '.state' 2>/dev/null || echo "unknown")
+            if [ "$PR_STATE" = "MERGED" ]; then
+              echo "PR release/v${VERSION} is already merged. Skipping merge step."
+              exit 0
+            fi
           fi
           # Use auto-merge only when there are pending status checks to wait for.
           # Valid mergeStateStatus values (gh GraphQL):

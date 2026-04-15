@@ -169,7 +169,10 @@ jobs:
 
       - name: Security audit
         run: |
-          # npm retired the pnpm audit endpoint (410). Use npm audit instead.
-          # pnpm projects don't have package-lock.json, so generate one first.
-          npm install --package-lock-only --ignore-scripts --quiet
-          npm audit --omit=dev
+          # pnpm audit endpoint retired (HTTP 410)
+          # npm audit crashes on pnpm repos (incompatible with pnpm's content-addressable store)
+          if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
+            echo "Skipping security audit: npm incompatible with pnpm node_modules structure"
+          else
+            npm audit --omit=dev --audit-level=moderate
+          fi

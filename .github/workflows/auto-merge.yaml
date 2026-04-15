@@ -1,0 +1,141 @@
+name: Auto Merge
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  auto-merge:
+    name: Auto Merge (QA + CTO Approved)
+    runs-on: runners-privilegedescalation
+    timeout-minutes: 5
+
+    steps:
+      - name: Check dual approval
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CTO_REVIEWER: privilegedescalation-cto
+          QA_REVIEWER: privilegedescalation-qa
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Checking approvals on PR #${PR_NUMBER} in ${REPO}"
+
+          REVIEWS=$(curl -sf \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}/reviews")
+
+          CTO_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${CTO_REVIEWER}" \
+            '[.[] | select(.user.login == $user or .user.login == ($user + "[bot]"))] | last | .state == "APPROVED"')
+
+          QA_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${QA_REVIEWER}" \
+            '[.[] | select(.user.login == $user or .user.login == ($user + "[bot]"))] | last | .state == "APPROVED"')
+
+          echo "CTO (${CTO_REVIEWER}) approved: ${CTO_APPROVED}"
+          echo "QA (${QA_REVIEWER}) approved: ${QA_APPROVED}"
+
+          if [ "${CTO_APPROVED}" = "true" ] && [ "${QA_APPROVED}" = "true" ]; then
+            echo "Both CTO and QA have approved."
+            echo "approved=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Dual approval not yet complete. Skipping merge."
+            if [ "${CTO_APPROVED}" != "true" ]; then
+              echo "  Missing: CTO approval from ${CTO_REVIEWER}"
+            fi
+            if [ "${QA_APPROVED}" != "true" ]; then
+              echo "  Missing: QA approval from ${QA_REVIEWER}"
+            fi
+            echo "approved=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Check PR merge readiness
+        if: steps.check.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Checking merge readiness for PR #${PR_NUMBER}"
+
+          PR_STATE=$(curl -sf \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${REPO}/pulls/${PR_NUMBER}" | jq -r '.mergeable_state')
+
+          echo "PR mergeable_state: ${PR_STATE}"
+
+          if [ "${PR_STATE}" = "clean" ] || [ "${PR_STATE}" = "unstable" ] || [ "${PR_STATE}" = "has_hooks" ]; then
+            echo "All required status checks passed."
+          elif [ "${PR_STATE}" = "blocked" ]; then
+            echo "PR is blocked (required checks not passing)."
+            exit 1
+          elif [ "${PR_STATE}" = "dirty" ]; then
+            echo "PR has merge conflicts. Cannot auto-merge."
+            exit 1
+          elif [ "${PR_STATE}" = "behind" ]; then
+            echo "PR is behind base branch. Cannot auto-merge."
+            exit 1
+          else
+            echo "PR state is '${PR_STATE}' — waiting for checks to complete."
+            exit 1
+          fi
+
+      - name: Generate CTO app installation token
+        if: steps.check.outputs.approved == 'true'
+        id: cto-token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Generating CTO app installation token for merge..."
+
+          b64enc() { openssl enc -base64 -A | tr '+/' '-_' | tr -d '='; }
+
+          NOW=$(date +%s)
+          HEADER=$(printf '{"alg":"RS256","typ":"JWT"}' | jq -r -c .)
+          PAYLOAD=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$NOW" "$((NOW + 600))" "${{ vars.CTO_APP_ID }}" | jq -r -c .)
+          SIGNED=$(printf '%s' "$HEADER" | b64enc).$(printf '%s' "$PAYLOAD" | b64enc)
+          SIG=$(printf '%s' "$SIGNED" | openssl dgst -binary -sha256 -sign "${{ secrets.CTO_APP_PEM }}" | b64enc)
+          JWT="${SIGNED}.${SIG}"
+
+          CTO_TOKEN=$(curl -s -X POST \
+            -H "Authorization: Bearer ${JWT}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/app/installations/${{ vars.CTO_APP_INSTALLATION_ID }}/access_tokens" \
+            | jq -r '.token')
+
+          echo "cto_token=${CTO_TOKEN}" >> "$GITHUB_OUTPUT"
+
+      - name: Install GitHub CLI
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          if ! command -v gh &>/dev/null; then
+            GH_VERSION="2.74.0"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" -o /tmp/gh.tar.gz
+            tar -xzf /tmp/gh.tar.gz -C /tmp
+            mkdir -p "$HOME/.local/bin"
+            mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" "$HOME/.local/bin/gh"
+            rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_amd64"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+            "$HOME/.local/bin/gh" --version
+          fi
+
+      - name: Enable auto-merge
+        if: steps.check.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ steps.cto-token.outputs.cto_token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Enabling auto-merge for PR #${PR_NUMBER}"
+          if ! "$HOME/.local/bin/gh" pr merge "${PR_NUMBER}" --auto --squash --delete-branch 2>&1; then
+            echo "::warning::Auto-merge not available. Falling back to direct squash merge."
+            "$HOME/.local/bin/gh" pr merge "${PR_NUMBER}" --squash --delete-branch
+          else
+            echo "Auto-merge enabled successfully."
+          fi

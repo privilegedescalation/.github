@@ -158,9 +158,8 @@ jobs:
 
       - name: Security audit
         run: |
-          # pnpm audit endpoint retired (HTTP 410) - skip for pnpm repos
           if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
-            echo "Skipping security audit for pnpm repo (pnpm audit endpoint retired)"
+            npx audit-ci --pnpm --audit-level=high
           else
-            npm audit --omit=dev
+            npx audit-ci --npm --audit-level=high
           fi

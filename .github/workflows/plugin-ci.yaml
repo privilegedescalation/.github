@@ -158,10 +158,9 @@ jobs:
 
       - name: Security audit
         run: |
+          # pnpm audit endpoint retired (HTTP 410) - skip for pnpm repos
           if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
-            pnpm audit --prod --audit-level=high
-            # --prod excludes devDependencies (vite, vitest, build tools);
-            # shipped plugin tarball contains only main.js + package.json
+            echo "Skipping security audit for pnpm repo (pnpm audit endpoint retired)"
           else
             npm audit --omit=dev
           fi

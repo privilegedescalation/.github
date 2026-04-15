@@ -20,6 +20,10 @@ name: Dual Approval Check
 on:
   workflow_call:
     inputs:
+      pr_number:
+        description: "Pull request number"
+        required: false
+        type: number
       cto-reviewer:
         description: "GitHub username of the CTO reviewer"
         required: false
@@ -43,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CTO_REVIEWER: ${{ inputs.cto-reviewer }}
           QA_REVIEWER: ${{ inputs.qa-reviewer }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ inputs.pr_number }}
           REPO: ${{ github.repository }}
         run: |
           if [ -z "${PR_NUMBER}" ]; then

@@ -116,7 +116,7 @@ jobs:
           fi
 
       - name: Setup pnpm (via Corepack, reads version from packageManager field)
-        if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
+        if: false  # disabled: corepack not available on runners-privilegedescalation
         run: |
           corepack enable pnpm
           corepack install

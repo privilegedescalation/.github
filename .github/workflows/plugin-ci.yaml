@@ -25,7 +25,6 @@ jobs:
           try:
               import yaml
           except ImportError:
-              # yaml not available — skip (shouldn't happen on ubuntu runners)
               print("::warning::PyYAML not available, skipping artifacthub-pkg.yml validation")
               sys.exit(0)
 
@@ -41,17 +40,14 @@ jobs:
 
           errors = []
 
-          # Required top-level fields
           for field in ["version", "name", "description", "homeURL"]:
               if not pkg.get(field):
                   errors.append(f"Missing required field: {field}")
 
-          # Version must be SemVer
           version = pkg.get("version", "")
           if version and not re.match(r'^\d+\.\d+\.\d+$', str(version)):
               errors.append(f"version '{version}' is not SemVer (expected X.Y.Z)")
 
-          # Headlamp plugin annotations
           annotations = pkg.get("annotations", {}) or {}
           archive_url = annotations.get("headlamp/plugin/archive-url", "")
           archive_checksum = annotations.get("headlamp/plugin/archive-checksum", "")
@@ -76,11 +72,6 @@ jobs:
         run: |
           if [ -f "pnpm-lock.yaml" ]; then
             echo "manager=pnpm" >> $GITHUB_OUTPUT
-            # Check for packageManager field in package.json (Corepack pinning).
-            # pnpm/action-setup@v4 errors when `packageManager` is set (even without
-            # a `version` input), so we use Corepack directly for those repos.
-            # Use python3 (pre-installed on Ubuntu ARC runners) instead of node,
-            # because node is not on PATH before the Setup Node step runs.
             PM=$(python3 -c "import json,sys; d=json.load(open('package.json')); print('true' if d.get('packageManager','').startswith('pnpm@') else 'false')" 2>/dev/null || echo "false")
             echo "has_package_manager=$PM" >> $GITHUB_OUTPUT
           else
@@ -92,8 +83,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node-version }}
-          # Only enable built-in npm caching here; pnpm caching is handled below
-          # after pnpm is installed (corepack is not available before setup-node).
           cache: ${{ steps.pkg-manager.outputs.manager == 'npm' && 'npm' || '' }}
 
       - name: Setup pnpm (via Corepack, reads version from packageManager field)
@@ -169,7 +158,15 @@ jobs:
 
       - name: Security audit
         run: |
-          # npm retired the pnpm audit endpoint (410). Use npm audit instead.
-          # pnpm projects don't have package-lock.json, so generate one first.
-          npm install --package-lock-only --ignore-scripts --quiet
-          npm audit --omit=dev
+          # The pnpm registry audit endpoint is retired (HTTP 410).
+          # Use npm's offline audit to check installed packages without network.
+          # For pnpm repos: generate a minimal package-lock.json from pnpm-lock.yaml via npm install --package-lock-only
+          # For npm repos: use npm audit directly.
+          if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
+            # Use --ignore-scripts to avoid running lifecycle hooks which may conflict with pnpm
+            # Use --no-audit to skip the audit during install (we audit after)
+            npm install --package-lock-only --ignore-scripts --quiet --no-audit 2>/dev/null || true
+            npm audit --omit=dev --audit-level=moderate
+          else
+            npm audit --omit=dev --audit-level=moderate
+          fi

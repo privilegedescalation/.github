@@ -99,6 +99,7 @@ jobs:
       - name: Setup pnpm (via Corepack, reads version from packageManager field)
         if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
         run: |
+          npm install -g corepack
           corepack enable pnpm
           corepack install
 
@@ -168,8 +169,6 @@ jobs:
 
       - name: Security audit
         run: |
-          if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
-            pnpm audit --prod
-          else
-            npm audit --omit=dev
-          fi
+          # npm retired the audit endpoint pnpm uses. Use npm's audit for both
+          # package managers to avoid 410 errors.
+          npm audit --omit=dev

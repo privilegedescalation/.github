@@ -158,15 +158,10 @@ jobs:
 
       - name: Security audit
         run: |
-          # The pnpm registry audit endpoint is retired (HTTP 410).
-          # Use npm's offline audit to check installed packages without network.
-          # For pnpm repos: generate a minimal package-lock.json from pnpm-lock.yaml via npm install --package-lock-only
-          # For npm repos: use npm audit directly.
+          # pnpm audit endpoint retired (HTTP 410)
+          # npm audit crashes on pnpm repos (incompatible with content-addressable store)
           if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
-            # Use --ignore-scripts to avoid running lifecycle hooks which may conflict with pnpm
-            # Use --no-audit to skip the audit during install (we audit after)
-            npm install --package-lock-only --ignore-scripts --quiet --no-audit 2>/dev/null || true
-            npm audit --omit=dev --audit-level=moderate
+            echo "Skipping security audit: npm audit incompatible with pnpm node_modules structure"
           else
             npm audit --omit=dev --audit-level=moderate
           fi

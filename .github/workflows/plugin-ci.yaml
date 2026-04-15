@@ -158,11 +158,8 @@ jobs:
 
       - name: Security audit
         run: |
-          # pnpm audit endpoint retired (HTTP 410). Use npm audit instead.
-          # pnpm projects lack package-lock.json so we generate one first.
-          # --no-audit skips the implicit audit during install (we run it explicitly after).
           if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
-            echo "Skipping npm audit for pnpm repo (pnpm audit endpoint retired HTTP 410; lockfile generation fails with corepack)"
+            pnpm audit --audit-level=high
           else
             npm audit --omit=dev
           fi

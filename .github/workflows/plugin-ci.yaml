@@ -169,6 +169,7 @@ jobs:
 
       - name: Security audit
         run: |
-          # npm retired the audit endpoint pnpm uses. Use npm's audit for both
-          # package managers to avoid 410 errors.
+          # npm retired the pnpm audit endpoint (410). Use npm audit instead.
+          # pnpm projects don't have package-lock.json, so generate one first.
+          npm install --package-lock-only --ignore-scripts --quiet
           npm audit --omit=dev

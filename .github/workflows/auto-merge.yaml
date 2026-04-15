@@ -24,6 +24,11 @@ jobs:
         run: |
           echo "Checking approvals on PR #${PR_NUMBER} in ${REPO}"
 
+          if [ -z "${{ vars.CTO_APP_ID }}" ] || [ -z "${{ vars.CTO_APP_INSTALLATION_ID }}" ] || [ -z "${{ secrets.CTO_APP_PEM }}" ]; then
+            echo "::error::Missing CTO app configuration. Set CTO_APP_ID, CTO_APP_INSTALLATION_ID (repository variables), and CTO_APP_PEM (secret) before enabling auto-merge. See PRI-103."
+            exit 1
+          fi
+
           REVIEWS=$(curl -sf \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -32,8 +37,13 @@ jobs:
           CTO_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${CTO_REVIEWER}" \
             '[.[] | select(.user.login == $user or .user.login == ($user + "[bot]"))] | last | .state == "APPROVED"')
 
+          # Note: GitHub review model returns all reviews; `last` here intentionally picks the most recent review per user.
+          # A user cannot have two approvals on the same PR, so this correctly checks whether the latest review is an approval.
+
           QA_APPROVED=$(echo "${REVIEWS}" | jq -r --arg user "${QA_REVIEWER}" \
             '[.[] | select(.user.login == $user or .user.login == ($user + "[bot]"))] | last | .state == "APPROVED"')
+
+          # Note: Same as above — `last` per user reflects the most recent review state.
 
           echo "CTO (${CTO_REVIEWER}) approved: ${CTO_APPROVED}"
           echo "QA (${QA_REVIEWER}) approved: ${QA_APPROVED}"
@@ -139,3 +149,4 @@ jobs:
           else
             echo "Auto-merge enabled successfully."
           fi
+

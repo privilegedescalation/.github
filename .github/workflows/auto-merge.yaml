@@ -102,7 +102,7 @@ jobs:
           echo "Generating CTO app installation token for merge..."
 
           CTO_PEM_FILE=$(mktemp)
-          echo "${{ secrets.CTO_APP_PEM }}" > "$CTO_PEM_FILE"
+          printf '%s' "${{ secrets.CTO_APP_PEM }}" > "$CTO_PEM_FILE"
           chmod 600 "$CTO_PEM_FILE"
 
           b64enc() { openssl enc -base64 -A | tr '+/' '-_' | tr -d '='; }
@@ -111,7 +111,7 @@ jobs:
           HEADER=$(printf '{"alg":"RS256","typ":"JWT"}' | jq -r -c .)
           PAYLOAD=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$NOW" "$((NOW + 600))" "${{ vars.CTO_APP_ID }}" | jq -r -c .)
           SIGNED=$(printf '%s' "$HEADER" | b64enc).$(printf '%s' "$PAYLOAD" | b64enc)
-          SIG=$(printf '%s' "$SIGNED" | openssl dgst -binary -sha256 -sign "$CTO_PEM_FILE" | b64enc)
+          SIG=$(printf '%s' "$SIGNED" | openssl dgst -sha256 -sign "$CTO_PEM_FILE" | b64enc)
           JWT="${SIGNED}.${SIG}"
 
           rm -f "$CTO_PEM_FILE"

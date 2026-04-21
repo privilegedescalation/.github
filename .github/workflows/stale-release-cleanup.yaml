@@ -1,0 +1,63 @@
+name: Stale Release Branch Cleanup
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly every Monday at 09:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no changes made)'
+        required: false
+        default: 'false'
+
+jobs:
+  cleanup-stale-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+          sparse-checkout-cone-mode: false
+
+      - name: Fetch all branches
+        run: git fetch --all --prune
+
+      - name: Find and clean stale release branches
+        id: stale
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          DAYS=14
+
+          # Find release branches older than 14 days not on main
+          for branch in $(git for-each-ref --format '%(refname:short)' 'refs/heads/release/*' 'refs/heads/v*'); do
+            ts=$(git log -1 --format='%ct' "$branch")
+            if [ -z "$ts" ]; then
+              continue
+            fi
+            age_days=$(( ($(date +%s) - ts) / 86400 ))
+
+            if [ "$age_days" -gt "$DAYS" ]; then
+              # Check if branch has been merged into main
+              if git log --merges --ancestry-path "$branch..main" --oneline 2>/dev/null | grep -q .; then
+                echo "Merged branch found: $branch (age: ${age_days}d)"
+                if [ "$DRY_RUN" != "true" ]; then
+                  echo "Deleting merged branch: $branch"
+                  git push origin --delete "$branch"
+                else
+                  echo "Would delete merged branch: $branch"
+                fi
+              fi
+            fi
+          done
+
+      - name: Report dry run results
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "Dry run complete. No branches were deleted."
+          echo ""
+          echo "Release branches found:"
+          git for-each-ref --format '%(refname:short) - %(committerdate:relative)' \
+            'refs/heads/release/*' 'refs/heads/v*' 2>/dev/null || echo "None found"

@@ -8,7 +8,8 @@ on:
       dry_run:
         description: 'Dry run (no changes made)'
         required: false
-        default: 'false'
+        default: false
+        type: boolean
 
 jobs:
   cleanup-stale-branches:
@@ -27,7 +28,7 @@ jobs:
       - name: Find and clean stale release branches
         id: stale
         env:
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || false }}
         run: |
           DAYS=14
 
@@ -43,11 +44,13 @@ jobs:
               # Check if branch has been merged into main
               if git merge-base --is-ancestor "$branch" main 2>/dev/null; then
                 echo "Merged branch found: $branch (age: ${age_days}d)"
-                if [ "$DRY_RUN" != "true" ]; then
-                  echo "Deleting merged branch: $branch"
-                  git push origin --delete "$branch"
-                else
+                if [ "$DRY_RUN" == "true" ]; then
                   echo "Would delete merged branch: $branch"
+                else
+                  echo "Deleting merged branch: $branch"
+                  if ! git push origin --delete "$branch" 2>&1; then
+                    echo "::warning::Failed to delete branch: $branch"
+                  fi
                 fi
               fi
             fi

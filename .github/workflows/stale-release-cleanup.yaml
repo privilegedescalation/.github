@@ -32,7 +32,7 @@ jobs:
           DAYS=14
 
           # Find release branches older than 14 days not on main
-          for branch in $(git for-each-ref --format '%(refname:short)' 'refs/heads/release/*' 'refs/heads/v*'); do
+          for branch in $(git for-each-ref --format '%(refname:short)' 'refs/heads/release/*' 'refs/heads/v[0-9]*'); do
             ts=$(git log -1 --format='%ct' "$branch")
             if [ -z "$ts" ]; then
               continue
@@ -41,7 +41,7 @@ jobs:
 
             if [ "$age_days" -gt "$DAYS" ]; then
               # Check if branch has been merged into main
-              if git log --merges --ancestry-path "$branch..main" --oneline 2>/dev/null | grep -q .; then
+              if git merge-base --is-ancestor "$branch" main 2>/dev/null; then
                 echo "Merged branch found: $branch (age: ${age_days}d)"
                 if [ "$DRY_RUN" != "true" ]; then
                   echo "Deleting merged branch: $branch"
@@ -60,4 +60,4 @@ jobs:
           echo ""
           echo "Release branches found:"
           git for-each-ref --format '%(refname:short) - %(committerdate:relative)' \
-            'refs/heads/release/*' 'refs/heads/v*' 2>/dev/null || echo "None found"
+            'refs/heads/release/*' 'refs/heads/v[0-9]*' 2>/dev/null || echo "None found"

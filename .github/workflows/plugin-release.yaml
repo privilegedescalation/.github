@@ -201,11 +201,19 @@ jobs:
       - name: Prepare release tarball
         run: |
           VERSION="${{ inputs.version }}"
-          PKG_NAME=$(jq -r .name package.json)
+          # headlamp-plugin names the tarball from the plugin directory name, not the
+          # package.json name field. The directory name is the last path segment (e.g.
+          # "headlamp-argocd-plugin" from "@privilegedescalation/headlamp-argocd-plugin").
+          # Scope prefixes (@org/) are stripped and remaining slashes become hyphens.
+          PKG_NAME=$(jq -r .name package.json | sed 's|^@||; s|/|-|')
           TARBALL="${PKG_NAME}-${VERSION}.tar.gz"
-          # Rename tarball if headlamp-plugin produced a different name
+          # Rename tarball if headlamp-plugin produced a different name.
+          # headlamp-plugin uses the directory name, which may differ from what we expect.
           for f in *.tar.gz; do
-            [ "$f" != "$TARBALL" ] && mv "$f" "$TARBALL"
+            if [ "$f" != "$TARBALL" ]; then
+              echo "Renaming $f -> $TARBALL"
+              mv "$f" "$TARBALL"
+            fi
           done
           if [ ! -f "$TARBALL" ]; then
             echo "Error: Expected tarball $TARBALL not found"

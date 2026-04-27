@@ -5,6 +5,14 @@
 set -euo pipefail
 
 ORG="privilegedescalation"
+
+fetch_plugin_repos() {
+  local query='headlamp-[a-z].*'
+  gh api repos/privilegedescalation --jq \
+    --arg query "$query" \
+    '[.[] | select(.name | test($query))] | sort_by(.name) | .[].name'
+}
+
 PLUGIN_REPOS=(
   headlamp-polaris-plugin
   headlamp-rook-plugin
@@ -12,6 +20,7 @@ PLUGIN_REPOS=(
   headlamp-intel-gpu-plugin
   headlamp-tns-csi-plugin
   headlamp-kube-vip-plugin
+  headlamp-argocd-plugin
   headlamp-plugin-template
 )
 

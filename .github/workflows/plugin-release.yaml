@@ -1,0 +1,370 @@
+name: Plugin Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.0)'
+        required: true
+        type: string
+      app-version:
+        description: 'Optional upstream app version to set as appVersion in artifacthub-pkg.yml'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      RELEASE_APP_ID:
+        required: true
+      RELEASE_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  check-secrets:
+    runs-on: runners-privilegedescalation
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Verify RELEASE_APP_ID is configured
+        id: check
+        env:
+          RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+        run: |
+          if [ -z "$RELEASE_APP_ID" ]; then
+            echo "::notice::RELEASE_APP_ID org secret is not configured. Release skipped."
+            echo "ready=false" >> $GITHUB_OUTPUT
+          else
+            echo "ready=true" >> $GITHUB_OUTPUT
+          fi
+
+  check-tag:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'true'
+    runs-on: runners-privilegedescalation
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check if tag already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/git/ref/tags/v${{ inputs.version }}" \
+            2>/dev/null || echo "000")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "::notice::Tag v${{ inputs.version }} already exists. Release skipped (not an error)."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+  check-token-permissions:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'true'
+    runs-on: runners-privilegedescalation
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Check write permissions via API
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          PUSH=$(gh api repos/${{ github.repository }} --jq '.permissions.push // false')
+          if [ "$PUSH" != "true" ]; then
+            echo "::error::GitHub App token lacks push (write) permission on ${{ github.repository }}."
+            exit 1
+          fi
+          echo "::notice::GitHub App token has write permission — release can proceed."
+
+  ci:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.ready == 'true'
+    uses: privilegedescalation/.github/.github/workflows/plugin-ci.yaml@main
+    secrets: inherit
+
+  release:
+    runs-on: runners-privilegedescalation
+    needs: [check-secrets, check-tag, check-token-permissions]
+    if: |
+      needs.check-secrets.outputs.ready == 'true' &&
+      needs.check-tag.outputs.skip != 'true'
+    timeout-minutes: 20
+
+    steps:
+      - name: Validate version format
+        run: |
+          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version '${{ inputs.version }}' is not valid SemVer (expected X.Y.Z)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: Detect package manager
+        id: pkg-manager
+        run: |
+          if [ -f "pnpm-lock.yaml" ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            PM=$(python3 -c "import json; d=json.load(open('package.json')); print('true' if d.get('packageManager','').startswith('pnpm@') else 'false')" 2>/dev/null || echo "false")
+            echo "has_package_manager=$PM" >> $GITHUB_OUTPUT
+            echo "lockfile=pnpm-lock.yaml" >> $GITHUB_OUTPUT
+          else
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "has_package_manager=false" >> $GITHUB_OUTPUT
+            echo "lockfile=package-lock.json" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: ${{ steps.pkg-manager.outputs.manager == 'npm' && 'npm' || '' }}
+
+      - name: Setup pnpm (via Corepack, reads version from packageManager field)
+        if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'true'
+        run: |
+          npm install -g corepack
+          corepack enable pnpm
+          corepack install
+
+      - name: Setup pnpm (version latest)
+        if: steps.pkg-manager.outputs.manager == 'pnpm' && steps.pkg-manager.outputs.has_package_manager == 'false'
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+          version: latest
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        if: steps.pkg-manager.outputs.manager == 'pnpm'
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        if: steps.pkg-manager.outputs.manager == 'pnpm'
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Update version in package.json
+        run: |
+          if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
+            pnpm version ${{ inputs.version }} --no-git-tag-version --allow-same-version
+          else
+            npm version ${{ inputs.version }} --no-git-tag-version --allow-same-version
+          fi
+
+      - name: Update artifacthub-pkg.yml
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -f artifacthub-pkg.yml ]; then
+            PKG_NAME=$(grep '^name:' artifacthub-pkg.yml | cut -d: -f2 | tr -d ' "')
+          else
+            PKG_NAME=$(python3 -c "import json; n=json.load(open('package.json'))['name']; print(n.split('/')[-1])")
+          fi
+          RELEASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${PKG_NAME}-${VERSION}.tar.gz"
+          sed -i "s/^version:.*/version: \"${VERSION}\"/" artifacthub-pkg.yml
+          sed -i "s|headlamp/plugin/archive-url:.*|headlamp/plugin/archive-url: \"${RELEASE_URL}\"|" artifacthub-pkg.yml
+          echo "PKG_NAME=$PKG_NAME" >> $GITHUB_ENV
+
+      - name: Update appVersion from upstream release
+        if: inputs.app-version != ''
+        run: |
+          sed -i "s/^appVersion:.*/appVersion: \"${{ inputs.app-version }}\"/" artifacthub-pkg.yml
+
+      - name: Install dependencies
+        run: |
+          max_attempts=3
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt of $max_attempts"
+            if [ "${{ steps.pkg-manager.outputs.manager }}" = "pnpm" ]; then
+              pnpm install --frozen-lockfile && break
+            else
+              npm ci && break
+            fi
+            if [ $attempt -lt $max_attempts ]; then
+              echo "::warning::Install failed on attempt $attempt. Retrying in 5 seconds..."
+              sleep 5
+            fi
+            attempt=$((attempt + 1))
+          done
+          if [ $attempt -gt $max_attempts ]; then
+            echo "::error::Install failed after $max_attempts attempts."
+            exit 1
+          fi
+
+      - name: Build plugin
+        run: npx @kinvolk/headlamp-plugin build
+
+      - name: Package plugin
+        run: npx @kinvolk/headlamp-plugin package
+
+      - name: Prepare release tarball
+        run: |
+          VERSION="${{ inputs.version }}"
+          PKG_NAME="${{ env.PKG_NAME }}"
+          TARBALL="${PKG_NAME}-${VERSION}.tar.gz"
+          for f in *.tar.gz; do
+            [ "$f" != "$TARBALL" ] && mv "$f" "$TARBALL"
+          done
+          if [ ! -f "$TARBALL" ]; then
+            echo "::error::Expected tarball $TARBALL not found."
+            ls -la *.tar.gz 2>/dev/null || echo "No .tar.gz files found."
+            exit 1
+          fi
+          echo "TARBALL=$TARBALL" >> $GITHUB_ENV
+
+      - name: Validate tarball
+        run: |
+          echo "Tarball: ${{ env.TARBALL }}"
+          ls -lh "${{ env.TARBALL }}"
+          tar -tzf "${{ env.TARBALL }}" | head -20
+          tar -tzf "${{ env.TARBALL }}" | grep -q "main.js" || {
+            echo "::error::main.js not found in tarball."
+            exit 1
+          }
+
+      - name: Compute checksum
+        run: |
+          CHECKSUM=$(sha256sum "${{ env.TARBALL }}" | awk '{print $1}')
+          echo "CHECKSUM=$CHECKSUM" >> $GITHUB_ENV
+          sed -i "s|headlamp/plugin/archive-checksum:.*|headlamp/plugin/archive-checksum: sha256:${CHECKSUM}|" artifacthub-pkg.yml
+
+      - name: Commit and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          BRANCH="release/v${VERSION}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code origin "refs/heads/$BRANCH" 2>/dev/null; then
+            echo "::notice::Branch $BRANCH already exists — deleting for clean re-trigger."
+            git push origin --delete "$BRANCH"
+          fi
+          git checkout -b "$BRANCH"
+          git add package.json "${{ steps.pkg-manager.outputs.lockfile }}" artifacthub-pkg.yml
+          git commit -m "release: v${VERSION}
+
+Co-Authored-By: Paperclip <noreply@paperclip.ing>"
+          git tag "v${VERSION}"
+          git push origin "$BRANCH"
+          git push origin "refs/tags/v${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          TARBALL="${{ env.TARBALL }}"
+          gh release create "v${VERSION}" \
+            --title "Release v${VERSION}" \
+            --notes "Release v${VERSION}" \
+            "$TARBALL"
+
+      - name: Generate GitHub App token
+        id: pr-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Install GitHub CLI
+        run: |
+          if ! command -v gh &>/dev/null || ! gh --version &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends gh
+          fi
+
+      - name: Create PR for version bump
+        # Fix: do NOT capture `gh pr create` stdout to parse a PR number from the URL.
+        # gh cli may emit status lines, open-browser prompts, or warnings to stdout
+        # that corrupt the URL capture, leaving PR_NUMBER empty even on success.
+        # Instead: call gh pr create for its side effect, then query gh pr list
+        # with --json for a stable structured lookup that is unaffected by
+        # incidental output.
+        env:
+          GH_TOKEN: ${{ steps.pr-token.outputs.token }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          BRANCH="release/v${VERSION}"
+
+          # Check for an existing open PR first.
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "$BRANCH" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty' \
+            2>/dev/null || true)
+
+          if [ -z "$PR_NUMBER" ]; then
+            gh pr create \
+              --repo "${{ github.repository }}" \
+              --head "$BRANCH" \
+              --base main \
+              --title "release: v${VERSION}" \
+              --body "Automated version bump and checksum update for v${VERSION}.
+
+cc @cpfarhood"
+
+            # Query after creation — immune to gh output format changes.
+            PR_NUMBER=$(gh pr list \
+              --repo "${{ github.repository }}" \
+              --head "$BRANCH" \
+              --base main \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty' \
+              2>/dev/null || true)
+          fi
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::Could not determine PR number for ${BRANCH}."
+            exit 1
+          fi
+
+          echo "::notice::PR #${PR_NUMBER} is open for ${BRANCH} → main."
+
+      - name: Verify checksums are consistent (main == tag == tarball)
+        run: |
+          VERSION="${{ inputs.version }}"
+          TARBALL_CS=$(sha256sum "${{ env.TARBALL }}" | awk '{print $1}')
+          TAG_CS=$(git show "v${VERSION}:artifacthub-pkg.yml" 2>/dev/null \
+            | grep "archive-checksum" | awk '{print $2}' | sed 's/sha256://' || echo "")
+          git fetch origin main --quiet 2>/dev/null || true
+          MAIN_CS=$(git show "origin/main:artifacthub-pkg.yml" 2>/dev/null \
+            | grep "archive-checksum" | awk '{print $2}' | sed 's/sha256://' || echo "")
+          echo "Tarball  SHA256: $TARBALL_CS"
+          echo "Tag      SHA256: $TAG_CS"
+          echo "Main     SHA256: $MAIN_CS"
+          if [ "$TARBALL_CS" != "$TAG_CS" ]; then
+            echo "::error::Tag checksum mismatch — tarball and tag artifacthub-pkg.yml diverged!"
+            exit 1
+          fi
+          echo "Tag checksum consistent."
+          if [ "$TARBALL_CS" != "$MAIN_CS" ]; then
+            echo "::notice::Main branch checksum differs (PR not yet merged — expected at this stage)."
+          fi

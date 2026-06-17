@@ -5,8 +5,9 @@ on:
     inputs:
       version:
         description: 'Release version (e.g. 1.0.0)'
-        required: true
+        required: false
         type: string
+        default: ''
       app-version:
         description: 'Optional upstream app version to set as appVersion in artifacthub-pkg.yml'
         required: false
@@ -14,9 +15,9 @@ on:
         default: ''
     secrets:
       RELEASE_APP_ID:
-        required: true
+        required: false
       RELEASE_APP_PRIVATE_KEY:
-        required: true
+        required: false
 
 jobs:
   check-secrets:
@@ -272,9 +273,8 @@ jobs:
           fi
           git checkout -b "$BRANCH"
           git add package.json "${{ steps.pkg-manager.outputs.lockfile }}" artifacthub-pkg.yml
-          git commit -m "release: v${VERSION}
-
-Co-Authored-By: Paperclip <noreply@paperclip.ing>"
+          git commit -m "release: v${VERSION}" \
+            -m "Co-Authored-By: Paperclip <noreply@paperclip.ing>"
           git tag "v${VERSION}"
           git push origin "$BRANCH"
           git push origin "refs/tags/v${VERSION}"
@@ -333,9 +333,7 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
               --head "$BRANCH" \
               --base main \
               --title "release: v${VERSION}" \
-              --body "Automated version bump and checksum update for v${VERSION}.
-
-cc @cpfarhood"; then
+              --body "$(printf 'Automated version bump and checksum update for v%s.\n\ncc @cpfarhood' "${VERSION}")"; then
               echo "::error::gh pr create failed. See runner log above for the actual gh error."
               exit 1
             fi

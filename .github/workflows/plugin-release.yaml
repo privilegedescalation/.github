@@ -81,7 +81,14 @@ jobs:
             echo "::error::GitHub App token lacks push (write) permission on ${{ github.repository }}."
             exit 1
           fi
-          echo "::notice::GitHub App token has write permission — release can proceed."
+          # Verify pull_requests: write — the scope the PR creation step requires.
+          PR_PERM=$(gh api "/repos/${{ github.repository }}/installation" \
+            --jq '.permissions.pull_requests // empty' 2>/dev/null || true)
+          if [ "$PR_PERM" != "write" ]; then
+            echo "::error::GitHub App installation lacks pull_requests:write on ${{ github.repository }} (got: '${PR_PERM}'). Release cannot create PRs."
+            exit 1
+          fi
+          echo "::notice::GitHub App token has contents:write and pull_requests:write — release can proceed."
 
   ci:
     needs: check-secrets
@@ -321,24 +328,32 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
             2>/dev/null || true)
 
           if [ -z "$PR_NUMBER" ]; then
-            gh pr create \
+            if ! gh pr create \
               --repo "${{ github.repository }}" \
               --head "$BRANCH" \
               --base main \
               --title "release: v${VERSION}" \
               --body "Automated version bump and checksum update for v${VERSION}.
 
-cc @cpfarhood"
+cc @cpfarhood"; then
+              echo "::error::gh pr create failed. See runner log above for the actual gh error."
+              exit 1
+            fi
 
-            # Query after creation — immune to gh output format changes.
-            PR_NUMBER=$(gh pr list \
-              --repo "${{ github.repository }}" \
-              --head "$BRANCH" \
-              --base main \
-              --state open \
-              --json number \
-              --jq '.[0].number // empty' \
-              2>/dev/null || true)
+            # Query after creation with retries — gh pr list can momentarily return
+            # empty immediately after creation due to API replication lag.
+            for attempt in 1 2 3; do
+              PR_NUMBER=$(gh pr list \
+                --repo "${{ github.repository }}" \
+                --head "$BRANCH" \
+                --base main \
+                --state open \
+                --json number \
+                --jq '.[0].number // empty' \
+                2>/dev/null || true)
+              [ -n "$PR_NUMBER" ] && break
+              [ "$attempt" -lt 3 ] && sleep 2
+            done
           fi
 
           if [ -z "$PR_NUMBER" ]; then

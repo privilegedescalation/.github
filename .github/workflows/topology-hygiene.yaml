@@ -1,0 +1,33 @@
+name: Topology Hygiene
+
+on:
+  workflow_call:
+
+jobs:
+  topology-hygiene:
+    runs-on: runners-privilegedescalation
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Scan for cluster-internal topology leaks
+        run: |
+          set -eu
+          # Board policy (PRI-1938): no cluster-internal service DNS committed to
+          # public plugin repos. Matches full FQDNs (*.svc.cluster.local) and the
+          # shorthand two-label form (<service>.<namespace>.svc) that also
+          # resolves inside the cluster.
+          PATTERN='\.svc\.cluster\.local|[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.svc\b'
+
+          if git grep -nIiE "$PATTERN" -- . \
+              ':(exclude,glob)**/topology-hygiene.yaml' \
+              ':(exclude,glob)**/topology-hygiene.yml'; then
+            echo "::error::Cluster-internal service DNS found in a public repo (see matches above). Do not commit *.svc.cluster.local or equivalent internal topology — use a placeholder or inject the value at runtime instead (see PRI-1937/PRI-1938)."
+            exit 1
+          fi
+
+          echo "No cluster-internal topology leaks found."
